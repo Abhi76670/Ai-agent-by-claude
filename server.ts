@@ -4,8 +4,8 @@ import { mkdtemp, writeFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
-// >>> Gemini API key from environment
-const API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY || "AQ.Ab8RN6JBMUZZu1f4IPyk_4TCpZlZBxOMGJ2cceI7LirsZbserw";
+// >>> Gemini API key (direct, no env)
+const API_KEY = "AQ.Ab8RN6JBMUZZu1f4IPyk_4TCpZlZBxOMGJ2cceI7LirsZbserw";
 const MODELS = ["gemini-3.8-flash", "gemini-3.5-flash"];
 
 const SYSTEM = `You are an AI app builder inside a dashboard, with your own terminal. Projects are simple React 18 apps with NO build step and NO imports/exports.
@@ -56,8 +56,8 @@ function parser(emit: (e: any) => void, onRun: (c: string) => void) {
   return { push(s: string) { buf += s; pump(); }, end() { if (mode === "text" && buf) emit({ type: "text", text: buf }); buf = ""; } };
 }
 
-// >>> NVIDIA key (build.nvidia.com, nvapi-...) yaha daalo, ya NVIDIA_API_KEY env set karo
-const NV_KEY = process.env.NVIDIA_API_KEY || "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";
+// >>> NVIDIA key (direct, no env)
+const NV_KEY = "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";
 
 async function skills() { // skills/<name>/SKILL.md sab models ke prompt me jaate hain
   let s = "";
@@ -152,5 +152,5 @@ app.post("/api/agent", async (req, res) => {
   res.end();
 });
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 app.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
