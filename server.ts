@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
 // >>> Gemini API key (direct, no env)
-const API_KEY = "AQ.Ab8RN6IDEEB5zZauCT5dzu6gHeNCMB-ST7kowH5AhrX5hWjM8g";
+const API_KEY = "AQ.Ab8RN6JBMUZZu1f4IPyk_4TCpZlZBxOMGJ2cceI7LirsZbserw";
 const MODELS = ["gemini-3.8-flash", "gemini-3.5-flash"];
 
 const SYSTEM = `You are an AI app builder inside a dashboard, with your own terminal. Projects are simple React 18 apps with NO build step and NO imports/exports.
