@@ -21,7 +21,8 @@ You are given the current project files: only write files that need to change an
 If the user only asks a question or chats, answer in plain text and do not write files.
 BEFORE building, think about what the app really needs: audience, sections or screens, believable realistic content (never lorem ipsum) and a distinctive visual style. Then build a complete, polished result. A build is complete only when BOTH src/App.jsx and src/styles.css exist. If the request is very vague, still build a good first version and end your reply by asking 1-2 specific questions (for example school name, colors).
 ALWAYS finish with a short reply to the user in the language they write in (Hinglish if they write Hinglish): what you built or fixed and what to try next. Never end a turn with only files.
-PROJECT FILES YOU MAINTAIN: requirements.md (create it first for a new project, update when needs change) and memory.md (update after every build or edit: decisions, files and their purpose, done, todo). Write every file the project needs, edit only what must change, and keep all files consistent. Apps must be responsive and keep user data in localStorage. The user may attach images or videos as reference: study them and recreate the design.`;
+PROJECT FILES YOU MAINTAIN: requirements.md (create it first for a new project, update when needs change) and memory.md (update after every build or edit: decisions, files and their purpose, done, todo). Write every file the project needs, edit only what must change, and keep all files consistent. Apps must be responsive and keep user data in localStorage. The user may attach images or videos as reference: study them and recreate the design.
+STACK: the default is the previewable React setup above. If the user explicitly asks for another stack (Flutter, Next.js ...), still write the correct file structure from the framework-analysis skill and tell the user the live preview only works for the default setup. A complete default build also has package.json, metadata.json, README.md and a Makefile (deploy skill). Before finishing, verify your files (verify-syntax skill, use <run> checks when possible), follow the security skill, and when you edit, follow the edit-responsibility skill.`;
 
 function parser(emit: (e: any) => void, onRun: (c: string) => void) {
   let buf = "", mode = "text", cur = "";
@@ -73,7 +74,23 @@ const nvFetch = (m: string, system: string, contents: any[]) => fetch("https://i
   method: "POST", headers: { Authorization: `Bearer ${NV_KEY}`, "Content-Type": "application/json" },
   body: JSON.stringify({ model: m, messages: toOpenAI(system, contents), stream: true, max_tokens: 16384, temperature: 0.6 }),
 });
-const nvParts = (j: any) => { const d = j.choices?.[0]?.delta || {}; const o: any[] = []; if (d.reasoning_content) o.push({ thought: true, text: d.reasoning_content }); if (d.content) o.push({ text: d.content }); return o; };
+const NVHINT = `\n\nIMPORTANT for this model: keep your reasoning very short (a few lines), then immediately write the files with <file path="..."> tags. Never put files in markdown code fences.`;
+const mkNvParts = () => { // reasoning_content / reasoning / <think> -> thought, rest -> text
+  let th = false;
+  return (j: any) => {
+    const ch = j.choices?.[0] || {}, d = ch.delta || {}, o: any[] = [];
+    const rc = d.reasoning_content || d.reasoning; if (rc) o.push({ thought: true, text: rc });
+    let c: string = d.content || "";
+    while (c) {
+      const tag = th ? "</think>" : "<think>", k = c.indexOf(tag), seg = k < 0 ? c : c.slice(0, k);
+      if (seg) o.push(th ? { thought: true, text: seg } : { text: seg });
+      if (k < 0) break;
+      c = c.slice(k + tag.length); th = !th;
+    }
+    if (ch.finish_reason === "length") o.push({ text: "\n⚠ Model ka token limit khatam ho gaya (zyada sochne me lag gaya). Dobara try karo ya dusra model chuno." });
+    return o;
+  };
+};
 
 const app = express();
 app.use(express.json({ limit: "40mb" }));
@@ -93,13 +110,14 @@ app.post("/api/agent", async (req, res) => {
   const send = (o: any) => res.write(`data: ${JSON.stringify(o)}\n\n`);
   const fsm: Record<string, string> = { ...(files || {}) }, acc: Record<string, string> = {};
   const project = Object.entries(fsm).map(([p, c]) => `--- ${p} ---\n${c}`).join("\n") || "(no files yet)";
-  const system = `${SYSTEM}${await skills()}\n\nCurrent project files:\n${project}`;
+  const system = `${SYSTEM}${await skills()}${typeof model === "string" && model.startsWith("nvidia:") ? NVHINT : ""}\n\nCurrent project files:\n${project}`;
   const contents: any[] = messages.map((m: any) => ({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] }));
   const nv = typeof model === "string" && model.startsWith("nvidia:");
   const m = nv ? model.slice(7) : MODELS.includes(model) ? model : MODELS[0];
   if (attachments?.length) contents[contents.length - 1].parts.push(...attachments.map((a: any) => ({ inline_data: { mime_type: a.mime, data: a.data } })));
   const dir = await mkdtemp(join(tmpdir(), "aib-"));
   let nid = 0;
+  const nvp = mkNvParts();
   try {
     for (let turn = 0; turn < 6; turn++) {
       const runs: { id: number; c: string }[] = [];
@@ -123,7 +141,7 @@ app.post("/api/agent", async (req, res) => {
         for (const ln of lines) {
           if (!ln.startsWith("data:")) continue;
           let j: any; try { j = JSON.parse(ln.slice(5)); } catch { continue; }
-          for (const p of nv ? nvParts(j) : j.candidates?.[0]?.content?.parts || []) {
+          for (const p of nv ? nvp(j) : j.candidates?.[0]?.content?.parts || []) {
             if (p.thought) { const t = p.text || ""; send({ type: "thought", text: t, heading: (t.match(/\*\*(.+?)\*\*/) || [])[1] }); }
             else if (p.text) { raw += p.text; P.push(p.text); }
           }
@@ -131,7 +149,9 @@ app.post("/api/agent", async (req, res) => {
       }
       P.end();
       if (!runs.length) {
-        const nudge = wrote && !fsm["src/App.jsx"]
+        const nudge = !wrote && /```[\s\S]{400,}?```/.test(raw)
+          ? "Do not use markdown code fences for files. Write every file now with <file path=\"...\">full content</file> tags."
+          : wrote && !fsm["src/App.jsx"]
           ? "src/App.jsx is missing, so the app cannot run. Write the full src/App.jsx now, then reply to the user briefly."
           : !saw ? "Now reply to the user in 2-3 short lines: what you built or answered, and what to try next." : "";
         if (!nudge || turn >= 4) break;
