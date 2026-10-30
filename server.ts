@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
 // >>> Apni Gemini API key yaha daalo (sirf server pe rehti hai, browser me nahi jaati)
-const API_KEY = process.env.GEMINI_API_KEY || "PASTE_YOUR_KEY_HERE";
+const API_KEY = process.env.GEMINI_API_KEY || "AQ.Ab8RN6JBMUZZu1f4IPyk_4TCpZlZBxOMGJ2cceI7LirsZbserw";
 const MODELS = ["gemini-3.8-flash", "gemini-3.5-flash"];
 
 const SYSTEM = `You are an AI app builder inside a dashboard, with your own terminal. Projects are simple React 18 apps with NO build step and NO imports/exports.
@@ -57,7 +57,7 @@ function parser(emit: (e: any) => void, onRun: (c: string) => void) {
 }
 
 // >>> NVIDIA key (build.nvidia.com, nvapi-...) yaha daalo, ya NVIDIA_API_KEY env set karo
-const NV_KEY = process.env.NVIDIA_API_KEY || "PASTE_NVIDIA_KEY_HERE";
+const NV_KEY = process.env.NVIDIA_API_KEY || "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";
 
 async function skills() { // skills/<name>/SKILL.md sab models ke prompt me jaate hain
   let s = "";
