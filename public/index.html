@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@property --a{syntax:'<angle>';inherits:false;initial-value:0deg}
+*{box-sizing:border-box}html,body,#root{height:100%;margin:0}
+body{background:#161616;color:#e6e6e6;font:15px/1.5 system-ui,sans-serif}
+button,select,input,textarea{font:inherit;color:inherit}
+button,select{background:#262626;border:1px solid #333;border-radius:10px;padding:7px 12px;cursor:pointer}
+.land{min-height:100%;display:grid;place-items:center;padding:20px}
+.panel,.home{width:min(560px,100%);text-align:center}
+.panel{background:#1d1d1d;border:1px solid #2c2c2c;border-radius:22px;padding:36px 24px;animation:in .5s ease}
+@keyframes in{from{opacity:0;transform:translateY(14px)}}
+h1,h2{margin:0 0 8px}.panel p{color:#999;margin:0 0 22px}
+.go{background:#e6e6e6;color:#111;border:0;font-weight:600;padding:10px 22px}
+.rgb{border-radius:18px;padding:2px;background:conic-gradient(from var(--a),#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);animation:spin 4s linear infinite;box-shadow:0 0 22px rgba(120,80,255,.25)}
+@keyframes spin{to{--a:360deg}}
+.rgb>div{background:#1b1b1b;border-radius:16px;padding:10px}
+textarea,.in{width:100%;background:none;border:0;outline:0;resize:none}
+.row{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:8px}
+.home .row.c{justify-content:center;margin-top:16px}
+.item{display:flex;justify-content:space-between;background:#1d1d1d;border-radius:10px;padding:10px 14px;margin-top:8px;cursor:pointer;text-align:left}
+.top{height:48px;display:flex;gap:8px;align-items:center;padding:0 10px;border-bottom:1px solid #2a2a2a}
+.nm{background:none;border:0;outline:0;flex:1;min-width:0;font-weight:600}
+.top .on,.chips .on{background:#e6e6e6;color:#111}
+.main{display:grid;grid-template-columns:minmax(300px,430px) 1fr;height:calc(100dvh - 48px)}
+.chat,.right{display:flex;flex-direction:column;min-height:0;border-right:1px solid #2a2a2a}
+.msgs{flex:1;overflow:auto;padding:12px}
+.u{background:#2a2a2a;border-radius:14px;padding:8px 12px;margin:10px 0 10px 30px;white-space:pre-wrap}
+.a{margin:10px 0;white-space:pre-wrap}.a summary{color:#9aa;cursor:pointer}
+details pre{max-height:180px;overflow:auto;font-size:12px;color:#888;white-space:pre-wrap}
+.f{background:#1d1d1d;border-radius:8px;padding:5px 10px;margin:4px 0;font:13px monospace;display:flex;gap:8px;align-items:center}
+.sp{width:12px;height:12px;border:2px solid #555;border-top-color:#fff;border-radius:50%;animation:r .7s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}
+.er{background:#2a1717;border:1px solid #5a2a2a;border-radius:10px;padding:8px 12px;margin:10px 0}
+.er pre{white-space:pre-wrap;font-size:12px}
+.chat .rgb{margin:10px}
+.right{border:0;position:relative}
+iframe{flex:1;border:0;background:#fff;width:100%}
+.empty{flex:1;display:grid;place-items:center;color:#777}
+.term{padding:6px 12px;border-top:1px solid #2a2a2a;color:#8ab;cursor:pointer;font-size:13px}
+.tl{max-height:160px;overflow:auto;background:#111;padding:8px 12px;font:12px monospace;color:#f88}
+.code{flex:1;overflow:auto;padding:10px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chips span{background:#262626;border-radius:8px;padding:4px 10px;font-size:13px;cursor:pointer}
+.code pre{font-size:12px;white-space:pre-wrap}
+.ok{color:#3ddc84}.at{cursor:pointer;padding:6px}select{max-width:46%}small{color:#999;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:22%}.cm{display:block;color:#9c9}.cm summary{display:flex;gap:8px;align-items:center;cursor:pointer;word-break:break-all}
+@media(max-width:800px){.main{grid-template-columns:1fr}.main[data-tab=chat] .right{display:none}.main:not([data-tab=chat]) .chat{display:none}}
+</style></head><body><div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useRef,useMemo}=React;
+const K='aib_projects', CDN='https://cdnjs.cloudflare.com/ajax/libs/';
+const CL='<'+'/script>';
+const load=()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch(e){return[]}};
+const build=f=>{
+  const js=Object.keys(f).filter(k=>/\.jsx?$/.test(k)).sort((a,b)=>(/App\.jsx$/.test(a)?1:0)-(/App\.jsx$/.test(b)?1:0)||a.localeCompare(b));
+  const css=Object.keys(f).filter(k=>k.endsWith('.css')).map(k=>f[k]).join('\n');
+  const tag=c=>'<script type="text/babel" data-presets="react">'+c.split('</script').join('<\\/script')+CL;
+  return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:system-ui,sans-serif}'+css+'</style>'
+   +'<script src="'+CDN+'react/18.3.1/umd/react.production.min.js">'+CL+'<script src="'+CDN+'react-dom/18.3.1/umd/react-dom.production.min.js">'+CL+'<script src="'+CDN+'babel-standalone/7.24.7/babel.min.js">'+CL
+   +'<script>var P=function(m){parent.postMessage({t:"err",msg:String(m)},"*")};onerror=function(m){P(m)};addEventListener("unhandledrejection",function(e){P(e.reason)});var ce=console.error;console.error=function(){P([].join.call(arguments," "));ce.apply(console,arguments)}'+CL
+   +'</head><body><div id="root"></div>'+js.map(k=>tag(f[k])).join('')
+   +tag('ReactDOM.createRoot(document.getElementById("root")).render(<App/>)')+'</body></html>';
+};
+function App(){
+  const [ps,setPs]=useState(load),[view,setView]=useState('welcome'),[id,setId]=useState(null),[all,setAll]=useState(false);
+  const [tab,setTab]=useState('chat'),[model,setModel]=useState('gemini-3.8-flash'),[txt,setTxt]=useState(''),[busy,setBusy]=useState(false);
+  const [errs,setErrs]=useState([]),[open,setOpen]=useState(false),[sel,setSel]=useState(null);
+  const [att,setAtt]=useState([]),[mods,setMods]=useState({gemini:['gemini-3.8-flash','gemini-3.5-flash'],nvidia:[]});
+  useEffect(()=>{fetch('/api/models').then(r=>r.json()).then(setMods).catch(()=>{})},[]);
+  const end=useRef(),cur=ps.find(p=>p.id===id);
+  const upd=(pid,fn)=>setPs(a=>{const n=a.map(p=>p.id===pid?fn(p):p);localStorage.setItem(K,JSON.stringify(n));return n});
+  const dr=useRef('');
+  const doc=useMemo(()=>busy?dr.current:(dr.current=build(cur?cur.files:{})),[busy,cur&&JSON.stringify(cur.files)]);
+  useEffect(()=>{end.current&&end.current.scrollIntoView()},[cur&&cur.messages]);
+  useEffect(()=>{const h=e=>{if(e.data&&e.data.t==='err'&&id){const msg=e.data.msg;
+    setErrs(x=>x.includes(msg)?x:[...x.slice(-9),msg]);
+    upd(id,p=>{const l=p.messages[p.messages.length-1];return l&&l.role==='err'&&l.text===msg?p:{...p,messages:[...p.messages,{role:'err',text:msg}]}})}};
+    addEventListener('message',h);return()=>removeEventListener('message',h)},[id]);
+
+  const run=async(text,pid,p0)=>{
+    if(!text.trim()||busy)return;const at=att;setAtt([]);setBusy(true);setErrs([]);setTxt('');
+    const base=[...p0.messages,{role:'user',text:text+(at.length?'\n📎 '+at.map(a=>a.name).join(', '):'')}],ai={role:'ai',text:'',heading:'Thinking',thoughts:'',files:[],cmds:[]};
+    let files={...p0.files},tp=0;
+    const push=()=>upd(pid,p=>({...p,files,messages:[...base,{...ai,files:[...ai.files]}]}));push();
+    try{
+      const r=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model,files,attachments:at.map(a=>({mime:a.mime,data:a.data})),messages:base.filter(m=>m.role==='user'||m.role==='ai').map(m=>({role:m.role,text:m.text||'(done)'}))})});
+      const rd=r.body.getReader(),dc=new TextDecoder();let buf='';
+      for(;;){const {done,value}=await rd.read();if(done)break;buf+=dc.decode(value,{stream:true});
+        const parts=buf.split('\n\n');buf=parts.pop();
+        for(const s of parts){const e=JSON.parse(s.slice(6));
+          if(e.type==='thought'){if(e.heading)ai.heading=e.heading;ai.thoughts+=e.text}
+          else if(e.type==='text')ai.text+=e.text;
+          else if(e.type==='error')ai.text+='\n⚠ '+e.text;
+          else if(e.type==='cmd'){if(e.status==='start')ai.cmds.push({id:e.id,cmd:e.cmd,st:'running',out:''});
+            else{const c=ai.cmds.find(x=>x.id===e.id);if(c){c.st='done';c.out=e.out}}}
+          else if(e.type==='file'){
+            if(e.status==='start'){ai.files.push({path:e.path,op:e.op,st:'loading'});if(e.op==='write'){files={...files,[e.path]:''};setSel(e.path)}}
+            else if(e.status==='chunk')files={...files,[e.path]:(files[e.path]||'')+e.content};
+            else{const f=[...ai.files].reverse().find(x=>x.path===e.path&&x.st==='loading');if(f)f.st='done';
+              if(e.op==='delete'){files={...files};delete files[e.path]}}}
+          const n=Date.now();if(n-tp>100){tp=n;push()}}}
+    }catch(x){ai.text+='\n⚠ '+x.message}
+    if(ai.heading==='Thinking')ai.heading='Done';push();setBusy(false)};
+
+  const start=(text,name)=>{const pid=Date.now().toString(36);
+    const p={id:pid,name:name||text.split(/\s+/).slice(0,4).join(' ')||'New project',files:{},messages:[]};
+    setPs(a=>{const n=[p,...a];localStorage.setItem(K,JSON.stringify(n));return n});
+    setId(pid);setView('work');setTab('chat');setErrs([]);if(text)run(text,pid,p)};
+  const zip=async()=>{const z=new JSZip();Object.entries(cur.files).forEach(([k,v])=>z.file(k,v));z.file('index.html',build(cur.files));
+    const a=document.createElement('a');a.href=URL.createObjectURL(await z.generateAsync({type:'blob'}));a.download=(cur.name||'project')+'.zip';a.click()};
+  const pick=e=>{[...e.target.files].forEach(f=>{const r=new FileReader();r.onload=()=>setAtt(a=>[...a,{name:f.name,mime:f.type,data:String(r.result).split(',')[1]}]);r.readAsDataURL(f)});e.target.value=''};
+  const models=<><select value={model} onChange={e=>setModel(e.target.value)}><optgroup label="Gemini">{mods.gemini.map(m=><option key={m} value={m}>{m}</option>)}</optgroup>
+    {mods.nvidia.length>0&&<optgroup label="NVIDIA">{mods.nvidia.map(m=><option key={m} value={'nvidia:'+m}>{m}</option>)}</optgroup>}</select>
+    <label className="at">📎<input type="file" accept="image/*,video/*" multiple hidden onChange={pick}/></label>{att.length>0&&<small>{att.map(a=>a.name).join(', ')}</small>}</>;
+
+  if(view==='welcome')return <div className="land"><div className="panel"><h1>Welcome</h1><p>Describe an app and let AI build it.</p><button className="go" onClick={()=>setView('home')}>Get started</button></div></div>;
+  if(view==='home')return <div className="land"><div className="home"><h2>What should we build?</h2>
+    <div className="rgb"><div><textarea rows="3" placeholder="Describe an app and let Gemini do the rest" value={txt} onChange={e=>setTxt(e.target.value)}/>
+      <div className="row">{models}<button className="go" onClick={()=>start(txt)}>Build</button></div></div></div>
+    <div className="row c"><button onClick={()=>setAll(!all)}>View all projects</button><button onClick={()=>start('',prompt('Project name (optional)'))}>+ Project</button></div>
+    {all&&(ps.length?ps.map(p=><div key={p.id} className="item" onClick={()=>{setId(p.id);setView('work');setTab('chat');setErrs([])}}>{p.name}
+      <span onClick={e=>{e.stopPropagation();setPs(a=>{const n=a.filter(x=>x.id!==p.id);localStorage.setItem(K,JSON.stringify(n));return n})}}>✕</span></div>):<p style={{color:'#777'}}>No projects yet.</p>)}
+  </div></div>;
+
+  const names=Object.keys(cur.files),last=cur.messages.length-1,file=sel&&cur.files[sel]!=null?sel:names[0];
+  return <div><div className="top"><button onClick={()=>setView('home')}>←</button>
+    <input className="nm" value={cur.name} onChange={e=>upd(id,p=>({...p,name:e.target.value}))}/>
+    {['chat','preview','code'].map(t=><button key={t} className={tab===t?'on':''} onClick={()=>setTab(t)}>{t==='code'?'</>':t[0].toUpperCase()+t.slice(1)}</button>)}
+    <button onClick={zip}>⬇ .zip</button></div>
+  <div className="main" data-tab={tab}>
+    <div className="chat"><div className="msgs">
+      {!cur.messages.length&&<p style={{color:'#777'}}>Describe your app below. Ask a question and the AI replies without building.</p>}
+      {cur.messages.map((m,i)=>m.role==='user'?<div key={i} className="u">{m.text}</div>
+       :m.role==='err'?<div key={i} className="er"><details><summary>⚠ {m.text.split('\n')[0].slice(0,70)}</summary><pre>{m.text}</pre></details>
+          <button onClick={()=>run('Fix this error in the running app:\n'+m.text,id,cur)}>Fix error</button></div>
+       :<div key={i} className="a"><details open={busy&&i===last}><summary>{busy&&i===last?'◌ ':<span className="ok">✓ </span>}{m.heading}</summary><pre>{m.thoughts||'…'}</pre></details>
+          {m.files.map((f,j)=><div key={j} className="f">{f.st==='loading'?<i className="sp"/>:f.op==='delete'?'🗑':<span className="ok">✓</span>} {f.path}{f.op==='delete'&&f.st==='done'?' (deleted)':''}</div>)}
+          {(m.cmds||[]).map((c,j)=><details key={'c'+j} className="f cm"><summary>{c.st==='running'?<i className="sp"/>:'$'} {c.cmd}</summary><pre>{c.out}</pre></details>)}
+          <div>{m.text}</div></div>)}
+      <div ref={end}/></div>
+      <div className="rgb"><div><input className="in" placeholder="Make changes, add features, ask anything" value={txt} disabled={busy} onChange={e=>setTxt(e.target.value)} onKeyDown={e=>e.key==='Enter'&&run(txt,id,cur)}/>
+        <div className="row">{models}<button className="go" disabled={busy} onClick={()=>run(txt,id,cur)}>{busy?'…':'Send'}</button></div></div></div></div>
+    <div className="right">{tab==='code'
+      ?<div className="code"><div className="chips">{names.map(k=><span key={k} className={k===file?'on':''} onClick={()=>setSel(k)}>{k} <b onClick={e=>{e.stopPropagation();upd(id,p=>{const f={...p.files};delete f[k];return{...p,files:f}})}}>✕</b></span>)}</div>
+         <pre>{file?cur.files[file]:'No files yet.'}</pre></div>
+      :names.length?<><iframe sandbox="allow-scripts" srcDoc={doc}/>
+         <div className="term" onClick={()=>setOpen(!open)}>ⓘ {errs.length} {open?'⌄':'⌃'}</div>
+         {open&&<div className="tl">{errs.length?errs.map((x,i)=><div key={i}>{x}</div>):'No errors.'}</div>}</>
+      :<div className="empty">Preview appears here once files are written.</div>}</div>
+  </div></div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script></body></html>
