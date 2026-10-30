@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
 // >>> Gemini API key (direct, no env)
-const API_KEY = "AQ.Ab8RN6IDEEB5zZauCT5dzu6gHeNCMB-ST7kowH5AhrX5hWjM8g";
+const API_KEY = "AQ.Ab8RN6JBMUZZu1f4IPyk_4TCpZlZBxOMGJ2cceI7LirsZbserw";
 const MODELS = ["gemini-3.8-flash", "gemini-3.5-flash"];
 
 const SYSTEM = `You are an AI app builder inside a dashboard, with your own terminal. Projects are simple React 18 apps with NO build step and NO imports/exports.
@@ -54,7 +54,7 @@ function parser(emit: (e: any) => void, onRun: (c: string) => void) {
       mode = "text";
     }
   };
-  return { push(s: string) { buf += s; pump(); }, end() { if (mode === "text" && buf) emit({ type: "text", text: buf }); buf = ""; } };
+  return { open: () => (mode === "file" ? cur : ""), push(s: string) { buf += s; pump(); }, end() { if (mode === "text" && buf) emit({ type: "text", text: buf }); buf = ""; } };
 }
 
 // >>> NVIDIA key (direct, no env)
@@ -104,10 +104,36 @@ app.get("/api/models", async (_q, res) => {
   res.json({ gemini: MODELS, nvidia });
 });
 
-app.post("/api/agent", async (req, res) => {
-  const { model, messages, files, attachments } = req.body;
+// Kaam (job) browser ke connection se alag chalta hai: browser band ho to bhi chalta rehta hai,
+// wapas aane par /api/job/:id se poori history dobara milti hai.
+type Job = { ev: any[]; done: boolean; subs: Set<(o: any) => void> };
+const jobs = new Map<string, Job>();
+app.post("/api/agent", (req, res) => {
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const job: Job = { ev: [], done: false, subs: new Set() };
+  jobs.set(id, job);
+  const send = (o: any) => {
+    job.ev.push(o); job.subs.forEach((f) => f(o));
+    if (o.type === "done") { job.done = true; setTimeout(() => jobs.delete(id), 3600e3); }
+  };
+  runAgent(req.body, send).catch((e) => { send({ type: "error", text: e.message }); send({ type: "done" }); });
+  res.json({ job: id });
+});
+app.get("/api/job/:id", (req, res) => {
   res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
-  const send = (o: any) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+  const out = (o: any) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+  const job = jobs.get(req.params.id);
+  if (!job) { out({ type: "error", text: "Ye kaam server par nahi mila (server restart hua hoga). Dobara bhejo." }); out({ type: "done" }); return res.end(); }
+  job.ev.forEach(out);
+  if (job.done) return res.end();
+  const ka = setInterval(() => res.write(": ping\n\n"), 15000);
+  const f = (o: any) => { out(o); if (o.type === "done") { clearInterval(ka); job.subs.delete(f); res.end(); } };
+  job.subs.add(f);
+  req.on("close", () => { clearInterval(ka); job.subs.delete(f); });
+});
+
+async function runAgent(body: any, send: (o: any) => void) {
+  const { model, messages, files, attachments } = body;
   const fsm: Record<string, string> = { ...(files || {}) }, acc: Record<string, string> = {};
   const project = Object.entries(fsm).map(([p, c]) => `--- ${p} ---\n${c}`).join("\n") || "(no files yet)";
   const system = `${SYSTEM}${await skills()}${typeof model === "string" && model.startsWith("nvidia:") ? NVHINT : ""}\n\nCurrent project files:\n${project}`;
@@ -133,14 +159,19 @@ app.post("/api/agent", async (req, res) => {
         method: "POST", headers: { "x-goog-api-key": API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { thinkingConfig: { includeThoughts: true } } }),
       });
-      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as any)?.error?.message || r.statusText);
-      const dec = new TextDecoder(); let sb = "", raw = "";
+      if (!r.ok) {
+        const ej: any = await r.json().catch(() => ({})), msg = ej?.error?.message || ej?.detail || r.statusText, who = nv ? "NVIDIA" : "Gemini";
+        throw new Error(r.status === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(msg) ? `API limit reached (${who}): ${msg}` : `${who} error ${r.status}: ${msg}`);
+      }
+      const dec = new TextDecoder(); let sb = "", raw = "", fin = "";
       for await (const chunk of r.body as any) {
         sb += dec.decode(chunk, { stream: true });
         const lines = sb.split("\n"); sb = lines.pop()!;
         for (const ln of lines) {
           if (!ln.startsWith("data:")) continue;
           let j: any; try { j = JSON.parse(ln.slice(5)); } catch { continue; }
+          if (j.error) throw new Error(j.error.message || "stream error");
+          if (!nv) { const fr = j.candidates?.[0]?.finishReason, bf = j.promptFeedback?.blockReason; if (bf) fin = "BLOCKED " + bf; else if (fr && fr !== "STOP") fin = fr; }
           for (const p of nv ? nvp(j) : j.candidates?.[0]?.content?.parts || []) {
             if (p.thought) { const t = p.text || ""; send({ type: "thought", text: t, heading: (t.match(/\*\*(.+?)\*\*/) || [])[1] }); }
             else if (p.text) { raw += p.text; P.push(p.text); }
@@ -148,8 +179,11 @@ app.post("/api/agent", async (req, res) => {
         }
       }
       P.end();
+      const cut = P.open();
+      if (cut) send({ type: "file", op: "write", path: cut, status: "done" });
+      if (fin) { send({ type: "text", text: `\n⚠ Model beech me ruk gaya (${fin})` + (/MAX_TOKENS/.test(fin) ? ": token limit khatam, jawab adhura raha." : ".") }); saw = true; }
       if (!runs.length) {
-        const nudge = !wrote && /```[\s\S]{400,}?```/.test(raw)
+        const nudge = cut ? `The file ${cut} was cut off by the token limit. Write that complete file again with <file> tags, keeping it compact.` : !wrote && /```[\s\S]{400,}?```/.test(raw)
           ? "Do not use markdown code fences for files. Write every file now with <file path=\"...\">full content</file> tags."
           : wrote && !fsm["src/App.jsx"]
           ? "src/App.jsx is missing, so the app cannot run. Write the full src/App.jsx now, then reply to the user briefly."
@@ -169,8 +203,7 @@ app.post("/api/agent", async (req, res) => {
     }
   } catch (e: any) { send({ type: "error", text: e.message }); }
   send({ type: "done" });
-  res.end();
-});
+}
 
 const PORT = 3000;
 app.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));

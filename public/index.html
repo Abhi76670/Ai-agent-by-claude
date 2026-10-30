@@ -87,6 +87,7 @@ function App(){
   const [sheet,setSheet]=useState(false),[q,setQ]=useState(''),[showAll,setShowAll]=useState(false),[fav,setFav]=useState(()=>{try{return JSON.parse(localStorage.getItem('aib_fav'))||[]}catch(e){return[]}});
   const [att,setAtt]=useState([]),[mods,setMods]=useState({gemini:['gemini-3.8-flash','gemini-3.5-flash'],nvidia:[]});
   useEffect(()=>{fetch('/api/models').then(r=>r.json()).then(setMods).catch(()=>{})},[]);
+  useEffect(()=>{const p=ps.find(x=>x.job);if(p){setId(p.id);setView('work');setTab('chat');follow(p.id,p.job.id,p.messages.slice(0,-1),p.job.files0)}},[]);
   const end=useRef(),cur=ps.find(p=>p.id===id);
   const upd=(pid,fn)=>setPs(a=>{const n=a.map(p=>p.id===pid?fn(p):p);localStorage.setItem(K,JSON.stringify(n));return n});
   const dr=useRef('');
@@ -99,29 +100,43 @@ function App(){
 
   const run=async(text,pid,p0)=>{
     if(!text.trim()||busy)return;const at=att;setAtt([]);setBusy(true);setErrs([]);setTxt('');
-    const base=[...p0.messages,{role:'user',text:text+(at.length?'\n📎 '+at.map(a=>a.name).join(', '):'')}],ai={role:'ai',text:'',heading:'Thinking',thoughts:'',files:[],cmds:[]};
-    let files={...p0.files},tp=0;
-    const push=()=>upd(pid,p=>({...p,files,messages:[...base,{...ai,files:[...ai.files]}]}));push();
+    const base=[...p0.messages,{role:'user',text:text+(at.length?'\n📎 '+at.map(a=>a.name).join(', '):'')}];
     try{
       const r=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model,files,attachments:at.map(a=>({mime:a.mime,data:a.data})),messages:base.filter(m=>m.role==='user'||m.role==='ai').map(m=>({role:m.role,text:m.text||'(done)'}))})});
-      const rd=r.body.getReader(),dc=new TextDecoder();let buf='';
-      for(;;){const {done,value}=await rd.read();if(done)break;buf+=dc.decode(value,{stream:true});
-        const parts=buf.split('\n\n');buf=parts.pop();
-        for(const s of parts){const e=JSON.parse(s.slice(6));
-          if(e.type==='thought'){if(e.heading)ai.heading=e.heading;ai.thoughts+=e.text}
-          else if(e.type==='text')ai.text+=e.text;
-          else if(e.type==='error')ai.text+='\n⚠ '+e.text;
-          else if(e.type==='cmd'){if(e.status==='start')ai.cmds.push({id:e.id,cmd:e.cmd,st:'running',out:''});
-            else{const c=ai.cmds.find(x=>x.id===e.id);if(c){c.st='done';c.out=e.out}}}
-          else if(e.type==='file'){
-            if(e.status==='start'){ai.files.push({path:e.path,op:e.op,st:'loading'});if(e.op==='write'){files={...files,[e.path]:''};setSel(e.path)}}
-            else if(e.status==='chunk')files={...files,[e.path]:(files[e.path]||'')+e.content};
-            else{const f=[...ai.files].reverse().find(x=>x.path===e.path&&x.st==='loading');if(f)f.st='done';
-              if(e.op==='delete'){files={...files};delete files[e.path]}}}
-          const n=Date.now();if(n-tp>100){tp=n;push()}}}
-    }catch(x){ai.text+='\n⚠ '+x.message}
-    if(ai.heading==='Thinking')ai.heading='Done';push();setBusy(false)};
+        body:JSON.stringify({model,files:p0.files,attachments:at.map(a=>({mime:a.mime,data:a.data})),messages:base.filter(m=>m.role==='user'||m.role==='ai').map(m=>({role:m.role,text:m.text||'(done)'}))})});
+      const j=await r.json();if(!j.job)throw new Error(j.error||'Server error');
+      upd(pid,p=>({...p,job:{id:j.job,files0:p0.files},messages:[...base,{role:'ai',text:'',heading:'Thinking',thoughts:'',files:[],cmds:[]}]}));
+      await follow(pid,j.job,base,p0.files);
+    }catch(x){upd(pid,p=>({...p,messages:[...base,{role:'ai',text:'⚠ '+x.message,heading:'Error',thoughts:'',files:[],cmds:[]}]}));setBusy(false)}};
+  // Server par chal rahe kaam ko follow karta hai; connection tute to dobara jodkar shuru se replay karta hai
+  const follow=async(pid,jid,base,files0)=>{
+    setBusy(true);let fin=false,tries=0,ai,files;
+    while(!fin&&tries<40){
+      ai={role:'ai',text:'',heading:'Thinking',thoughts:'',files:[],cmds:[]};files={...files0};let tp=0;
+      const push=()=>upd(pid,p=>({...p,files,messages:[...base,{...ai,files:[...ai.files]}]}));push();
+      try{
+        const r=await fetch('/api/job/'+jid),rd=r.body.getReader(),dc=new TextDecoder();let buf='';
+        for(;;){const {done,value}=await rd.read();if(done)break;buf+=dc.decode(value,{stream:true});
+          const parts=buf.split('\n\n');buf=parts.pop();
+          for(const s of parts){if(!s.startsWith('data:'))continue;const e=JSON.parse(s.slice(5));
+            if(e.type==='thought'){if(e.heading)ai.heading=e.heading;ai.thoughts+=e.text}
+            else if(e.type==='text')ai.text+=e.text;
+            else if(e.type==='error')ai.text+='\n⚠ '+e.text;
+            else if(e.type==='cmd'){if(e.status==='start')ai.cmds.push({id:e.id,cmd:e.cmd,st:'running',out:''});
+              else{const c=ai.cmds.find(x=>x.id===e.id);if(c){c.st='done';c.out=e.out}}}
+            else if(e.type==='file'){
+              if(e.status==='start'){ai.files.push({path:e.path,op:e.op,st:'loading'});if(e.op==='write'){files={...files,[e.path]:''};setSel(e.path)}}
+              else if(e.status==='chunk')files={...files,[e.path]:(files[e.path]||'')+e.content};
+              else{const f=[...ai.files].reverse().find(x=>x.path===e.path&&x.st==='loading');if(f)f.st='done';
+                if(e.op==='delete'){files={...files};delete files[e.path]}}}
+            else if(e.type==='done')fin=true;
+            const n=Date.now();if(n-tp>100){tp=n;push()}}}
+      }catch(x){}
+      if(!fin){tries++;await new Promise(r=>setTimeout(r,1500))}else push();
+    }
+    if(!fin)ai.text+='\n⚠ Server se connection toot gaya. App dobara khologe to kaam wahin se dikhega.';
+    if(ai.heading==='Thinking')ai.heading='Done';
+    upd(pid,p=>({...p,files,job:fin?null:p.job,messages:[...base,{...ai,files:[...ai.files]}]}));setBusy(false)};
 
   const start=(text,name)=>{const pid=Date.now().toString(36);
     const p={id:pid,name:name||text.split(/\s+/).slice(0,4).join(' ')||'New project',files:{},messages:[]};
