@@ -4,8 +4,8 @@ import { mkdtemp, writeFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
-// >>> Apni Gemini API key yaha daalo (sirf server pe rehti hai, browser me nahi jaati)
-const API_KEY = process.env.GEMINI_API_KEY || "AQ.Ab8RN6JBMUZZu1f4IPyk_4TCpZlZBxOMGJ2cceI7LirsZbserw";
+// >>> Gemini API key from environment
+const API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY || "AQ.Ab8RN6JBMUZZu1f4IPyk_4TCpZlZBxOMGJ2cceI7LirsZbserw";
 const MODELS = ["gemini-3.8-flash", "gemini-3.5-flash"];
 
 const SYSTEM = `You are an AI app builder inside a dashboard, with your own terminal. Projects are simple React 18 apps with NO build step and NO imports/exports.
@@ -152,5 +152,5 @@ app.post("/api/agent", async (req, res) => {
   res.end();
 });
 
-// 127.0.0.1 only: terminal commands sirf tumhare device se hi chal sakte hain
-app.listen(3000, "127.0.0.1", () => console.log("Open http://localhost:3000"));
+const PORT = Number(process.env.PORT) || 3000;
+app.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));

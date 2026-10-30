@@ -1,0 +1,8 @@
+{
+  "name": "AI App Builder",
+  "description": "An interactive AI app builder dashboard powered by Gemini to create, edit, and run React applications.",
+  "prompt": "An AI app builder inside a dashboard with live preview and code export",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,7 +1,10 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI Builder</title>
+<title>AI App Builder</title>
+<meta name="description" content="An interactive AI app builder dashboard powered by Gemini to create, edit, and run React applications.">
+<meta property="og:title" content="AI App Builder">
+<meta property="og:description" content="An interactive AI app builder dashboard powered by Gemini to create, edit, and run React applications.">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
@@ -123,7 +126,7 @@ function App(){
   if(view==='home')return <div className="land"><div className="home"><h2>What should we build?</h2>
     <div className="rgb"><div><textarea rows="3" placeholder="Describe an app and let Gemini do the rest" value={txt} onChange={e=>setTxt(e.target.value)}/>
       <div className="row">{models}<button className="go" onClick={()=>start(txt)}>Build</button></div></div></div>
-    <div className="row c"><button onClick={()=>setAll(!all)}>View all projects</button><button onClick={()=>start('',prompt('Project name (optional)'))}>+ Project</button></div>
+    <div className="row c"><button onClick={()=>setAll(!all)}>View all projects</button><button onClick={()=>start('','New project')}>+ Project</button></div>
     {all&&(ps.length?ps.map(p=><div key={p.id} className="item" onClick={()=>{setId(p.id);setView('work');setTab('chat');setErrs([])}}>{p.name}
       <span onClick={e=>{e.stopPropagation();setPs(a=>{const n=a.filter(x=>x.id!==p.id);localStorage.setItem(K,JSON.stringify(n));return n})}}>✕</span></div>):<p style={{color:'#777'}}>No projects yet.</p>)}
   </div></div>;
